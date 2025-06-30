@@ -21,7 +21,14 @@ period = st.selectbox('Time Range 時間範圍', ['7d', '30d', '180d', '365d'], 
 
 if assets:
     with st.spinner('Downloading data...'):
-        data = yf.download(assets, period=period)['Adj Close']
+        raw_data = yf.download(assets, period=period, group_by='ticker')
+
+        if len(assets) == 1:
+            data = raw_data['Adj Close'].to_frame()
+            data.columns = assets
+        else:
+            data = raw_data.xs('Adj Close', axis=1, level=1)
+
         norm_data = data / data.iloc[0] * 100
 
     st.subheader('📈 Normalized Price Trend 正規化價格趨勢')
