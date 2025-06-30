@@ -11,10 +11,14 @@ st.title("CryptoA - Asset Analytics")
 lang = st.sidebar.selectbox('Language 語言', ['English', '繁體中文'])
 dark_mode = st.sidebar.checkbox('🌙 Dark Mode')
 
+# 資產清單與預設
+all_assets = ['BTC-USD', 'GLD', 'COIN', 'ETH-USD', 'TSLA', 'SPY', 'MSTR']
+default_assets = ['BTC-USD', 'GLD', 'COIN']
+
 assets = st.multiselect(
     'Select Assets 選擇資產',
-    ['BTC-USD', 'ETH-USD', 'TSLA', 'SPY', 'GLD', 'MSTR', 'COIN'],
-    ['BTC-USD', 'GLD', 'COIN']
+    options=all_assets,
+    default=default_assets
 )
 
 period = st.selectbox('Time Range 時間範圍', ['7d', '30d', '180d', '365d'], index=3)
