@@ -16,42 +16,43 @@ dark_mode = st.sidebar.checkbox('🌙 Dark Mode')
 all_assets = ['BTC-USD', 'GLD', 'COIN', 'ETH-USD', 'TSLA', 'SPY', 'MSTR']
 default_assets = ['BTC-USD', 'GLD', 'COIN']
 
+# Reset 所有 Session State
+if st.sidebar.button('🗑️ Reset All'):
+    st.session_state.clear()
+    st.experimental_rerun()
+
 # 初始化 Session State
 if 'assets' not in st.session_state:
     st.session_state['assets'] = default_assets
 
-# Reset 按鈕
-if st.button('🔄 Reset to Default Assets'):
-    st.session_state['assets'] = default_assets
-
 # Multiselect
-assets = st.multiselect(
+selected_assets = st.sidebar.multiselect(
     'Select Assets 選擇資產',
     options=all_assets,
     default=st.session_state['assets']
 )
 
-# 即時同步選擇到 Session State
-st.session_state['assets'] = assets
+# 寫入 session_state
+st.session_state['assets'] = selected_assets
 
 # 時間範圍
 period = st.selectbox('Time Range 時間範圍', ['7d', '30d', '180d', '365d'], index=3)
 
 # 自動資料抓取
-if assets:
+if selected_assets:
     with st.spinner('Downloading data...'):
-        raw_data = yf.download(assets, period=period, group_by='ticker', auto_adjust=True)
+        raw_data = yf.download(selected_assets, period=period, group_by='ticker', auto_adjust=True)
 
         if isinstance(raw_data.columns, pd.MultiIndex):
             data = pd.DataFrame()
-            for ticker in assets:
+            for ticker in selected_assets:
                 try:
                     data[ticker] = raw_data[ticker]['Close']
                 except:
                     st.warning(f"⚠️ No data for {ticker}")
         else:
             data = raw_data[['Close']]
-            data.columns = assets
+            data.columns = selected_assets
 
         # 填補缺失值
         data = data.fillna(method='ffill')

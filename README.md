@@ -7,6 +7,7 @@ A Streamlit app for crypto and stock analysis.
 - 🔥 Correlation Heatmap
 - 🛠️ Data Quality Check (Moved to the bottom)
 - 🔄 Reset to Default Assets button
+- 🗑️ Reset All (Clear Session State)
 - 🗂️ Session State fully managed (No default error)
 - 🌙 Dark/Light Mode
 - 🌐 Multi-language (English, Traditional Chinese)
