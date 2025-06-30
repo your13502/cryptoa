@@ -25,14 +25,14 @@ if st.sidebar.button('🗑️ Reset to Default Assets'):
     st.session_state.assets = default_assets
 
 # Multiselect 完全由 Session State 控制
-selected_assets = st.sidebar.multiselect(
+st.sidebar.multiselect(
     'Select Assets 選擇資產',
     options=all_assets,
-    default=st.session_state.assets
+    default=[],
+    key='assets'
 )
 
-# 寫入 Session State
-st.session_state.assets = selected_assets
+selected_assets = st.session_state.assets
 
 # 時間範圍
 period = st.selectbox('Time Range 時間範圍', ['7d', '30d', '180d', '365d'], index=3)
