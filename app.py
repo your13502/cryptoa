@@ -29,7 +29,15 @@ if assets:
             data = raw_data[['Close']]
             data.columns = assets
 
+        # 填補缺失值，避免圖形斷線
+        data = data.fillna(method='ffill')
+
+        # 正規化數據
         norm_data = data / data.iloc[0] * 100
+
+    st.subheader('🛠️ Data Quality Check 資料品質檢查')
+    missing = data.isna().sum().to_frame('Missing Values')
+    st.dataframe(missing)
 
     st.subheader('📈 Normalized Price Trend 正規化價格趨勢')
     norm_df = norm_data.reset_index().melt(id_vars='Date', var_name='Asset', value_name='Normalized Price')
