@@ -3,11 +3,10 @@
 A Streamlit app for crypto and stock analysis.
 
 ## Features
-- 📈 Normalized Price Trend (Stable with multi-asset support)
+- 📈 Normalized Price Trend
 - 🔥 Correlation Heatmap
-- 🛠️ Data Quality Check (Moved to the bottom)
-- 🔄 Reset to Default Assets button
-- 🗑️ Reset All (Clear Session State)
+- 🛠️ Data Quality Check
+- 🗑️ Reset to Default Assets
 - 🗂️ Session State fully managed (No default error)
 - 🌙 Dark/Light Mode
 - 🌐 Multi-language (English, Traditional Chinese)
