@@ -8,21 +8,36 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="CryptoA", layout="wide")
 st.title("CryptoA - Asset Analytics")
 
+# 語言與主題
 lang = st.sidebar.selectbox('Language 語言', ['English', '繁體中文'])
 dark_mode = st.sidebar.checkbox('🌙 Dark Mode')
 
-# 資產清單與預設
+# 資產選擇與Session State控制
 all_assets = ['BTC-USD', 'GLD', 'COIN', 'ETH-USD', 'TSLA', 'SPY', 'MSTR']
 default_assets = ['BTC-USD', 'GLD', 'COIN']
 
+# 初始化 Session State
+if 'assets' not in st.session_state:
+    st.session_state['assets'] = default_assets
+
+# Reset 按鈕
+if st.button('🔄 Reset to Default Assets'):
+    st.session_state['assets'] = default_assets
+
+# Multiselect
 assets = st.multiselect(
     'Select Assets 選擇資產',
     options=all_assets,
-    default=default_assets
+    default=st.session_state['assets']
 )
 
+# 即時同步選擇到 Session State
+st.session_state['assets'] = assets
+
+# 時間範圍
 period = st.selectbox('Time Range 時間範圍', ['7d', '30d', '180d', '365d'], index=3)
 
+# 自動資料抓取
 if assets:
     with st.spinner('Downloading data...'):
         raw_data = yf.download(assets, period=period, group_by='ticker', auto_adjust=True)
