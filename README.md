@@ -1,12 +1,12 @@
 # CryptoA
 
-A simple asset analytics app for crypto and stocks built with Streamlit.
+A Streamlit app for crypto and stock analysis.
 
 ## Features
-- Normalized Price Trend
-- Correlation Heatmap
-- Dark/Light Mode
-- Multi-language (English, Traditional Chinese)
+- 📈 Normalized Price Trend
+- 🔥 Correlation Heatmap
+- 🌙 Dark/Light Mode
+- 🌐 Multi-language (English, Traditional Chinese)
 
 ## How to Run
 1. Install requirements:
@@ -17,10 +17,7 @@ pip install -r requirements.txt
 ```
 streamlit run app.py
 ```
-3. Visit the local URL shown in terminal
+3. Open the local URL shown in the terminal
 
 ## Deployment
-Deploy easily on Streamlit Cloud.
-
-## Fonts
-Fonts are included in `/fonts` for multilingual support.
+Deploy easily on Streamlit Cloud by linking your GitHub repository.
