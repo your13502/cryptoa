@@ -14,7 +14,7 @@ dark_mode = st.sidebar.checkbox('🌙 Dark Mode')
 assets = st.multiselect(
     'Select Assets 選擇資產',
     ['BTC-USD', 'ETH-USD', 'TSLA', 'SPY', 'GLD', 'MSTR', 'COIN'],
-    ['BTC-USD', 'ETH-USD']
+    ['BTC-USD', 'GLD', 'COIN']
 )
 
 period = st.selectbox('Time Range 時間範圍', ['7d', '30d', '180d', '365d'], index=3)
@@ -24,20 +24,21 @@ if assets:
         raw_data = yf.download(assets, period=period, group_by='ticker', auto_adjust=True)
 
         if isinstance(raw_data.columns, pd.MultiIndex):
-            data = raw_data.xs('Close', axis=1, level=1)
+            data = pd.DataFrame()
+            for ticker in assets:
+                try:
+                    data[ticker] = raw_data[ticker]['Close']
+                except:
+                    st.warning(f"⚠️ No data for {ticker}")
         else:
             data = raw_data[['Close']]
             data.columns = assets
 
-        # 填補缺失值，避免圖形斷線
+        # 填補缺失值
         data = data.fillna(method='ffill')
 
-        # 正規化數據
+        # 正規化
         norm_data = data / data.iloc[0] * 100
-
-    st.subheader('🛠️ Data Quality Check 資料品質檢查')
-    missing = data.isna().sum().to_frame('Missing Values')
-    st.dataframe(missing)
 
     st.subheader('📈 Normalized Price Trend 正規化價格趨勢')
     norm_df = norm_data.reset_index().melt(id_vars='Date', var_name='Asset', value_name='Normalized Price')
@@ -50,6 +51,10 @@ if assets:
     plt.figure(figsize=(8, 6))
     sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f")
     st.pyplot(plt)
+
+    st.subheader('🛠️ Data Quality Check 資料品質檢查')
+    missing = data.isna().sum().to_frame('Missing Values')
+    st.dataframe(missing)
 
     st.caption(
         f"Last Updated 最後更新時間: {pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d %H:%M:%S')}"

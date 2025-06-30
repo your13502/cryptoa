@@ -3,9 +3,9 @@
 A Streamlit app for crypto and stock analysis.
 
 ## Features
-- 📈 Normalized Price Trend (with missing value handling)
+- 📈 Normalized Price Trend (Stable with multi-asset support)
 - 🔥 Correlation Heatmap
-- 🛠️ Data Quality Check
+- 🛠️ Data Quality Check (Moved to the bottom)
 - 🌙 Dark/Light Mode
 - 🌐 Multi-language (English, Traditional Chinese)
 
