@@ -6,9 +6,11 @@ import seaborn as sns
 from datetime import datetime, timedelta
 import pytz
 import numpy as np
+import time
+from yfinance.exceptions import YFRateLimitError
 
 st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard")
+st.title("Asset Analysis Dashboard (With Retry)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -30,6 +32,10 @@ selected_assets = st.sidebar.multiselect(
 
 if not selected_assets:
     st.warning("⚠️ Please select at least one asset.")
+    st.stop()
+
+if len(selected_assets) > 5:
+    st.warning("⚠️ To avoid rate limits, please select 5 or fewer assets.")
     st.stop()
 
 time_range = st.sidebar.selectbox(
@@ -58,13 +64,21 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 for symbol in selected_assets:
-    ticker = yf.Ticker(symbol)
-    hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
-    if not hist.empty:
-        data[symbol] = hist["Close"]
+    for attempt in range(3):  # 最多重試 3 次
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+            if not hist.empty:
+                data[symbol] = hist["Close"]
+            break
+        except YFRateLimitError:
+            st.warning(f"⚠️ Rate limit hit while fetching {symbol}. Retrying... (attempt {attempt+1})")
+            time.sleep(5)
+    else:
+        st.error(f"❌ Failed to fetch data for {symbol} after multiple attempts.")
 
 if not data:
-    st.warning("⚠️ No data available.")
+    st.error("❌ No data could be loaded due to repeated rate limiting.")
     st.stop()
 
 price_df = pd.DataFrame(data).ffill().bfill()
@@ -74,7 +88,6 @@ if price_df.empty:
 
 returns = price_df.pct_change()
 
-# Pairwise correlation with dropna per pair
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
@@ -87,7 +100,6 @@ def pairwise_corr(df):
                 corr_matrix.loc[a, b] = np.nan
     return corr_matrix
 
-# 圖表：Normalized Price Trend
 st.subheader("Normalized Price Trend")
 fig, ax = plt.subplots(figsize=(12, 5))
 for symbol in price_df.columns:
@@ -104,7 +116,6 @@ ax.text(1.0, 1.02, f"Last Updated: {fetch_time_local}",
         transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=text_color)
 st.pyplot(fig)
 
-# Heatmap：修正後的 pairwise correlation
 st.subheader("Correlation Heatmap (pairwise valid data)")
 corr = pairwise_corr(returns)
 fig2, ax2 = plt.subplots(figsize=(8, 6))
