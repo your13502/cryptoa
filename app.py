@@ -9,14 +9,14 @@ import numpy as np
 import time
 import requests
 
-st.set_page_config(page_title="CryptoA ETH Debug", layout="wide")
-st.title("CryptoA Debug Mode: ETH via CoinGecko")
+st.set_page_config(page_title="CryptoA - ETH via Alpha Vantage", layout="wide")
+st.title("CryptoA Dashboard (ETH via Alpha Vantage)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
     "ETH-USD": "Ethereum",
     "GLD": "Gold ETF",
-    "COIN": "Coinbase",
+    "COIN": "Coinbase"
 }
 
 selected_assets = st.sidebar.multiselect(
@@ -44,25 +44,32 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 
-# ETH from CoinGecko (with normalized index)
-def fetch_eth_from_coingecko(start_date, end_date):
-    url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
-    days = (end_date - start_date).days + 1
-    params = {"vs_currency": "usd", "days": days, "interval": "daily"}
+# ETH from Alpha Vantage
+def fetch_eth_from_alpha_vantage():
+    url = "https://www.alphavantage.co/query"
+    params = {
+        "function": "DIGITAL_CURRENCY_DAILY",
+        "symbol": "ETH",
+        "market": "USD",
+        "apikey": "XR75NDTSCL5M3GST"
+    }
     r = requests.get(url, params=params)
     if r.status_code != 200:
         return None
-    prices = r.json()["prices"]
-    df = pd.DataFrame(prices, columns=["ts", "price"])
-    df["Date"] = pd.to_datetime(df["ts"], unit="ms").dt.normalize()
-    df = df.set_index("Date")
-    df = df[~df.index.duplicated(keep="first")]
-    return df["price"]
+    raw = r.json()
+    if "Time Series (Digital Currency Daily)" not in raw:
+        return None
+    df = pd.DataFrame.from_dict(raw["Time Series (Digital Currency Daily)"], orient="index")
+    df.index = pd.to_datetime(df.index)
+    df.sort_index(inplace=True)
+    return df["4a. close (USD)"].astype(float)
 
+# 抓資料
 for symbol in selected_assets:
     if symbol == "ETH-USD":
-        eth_series = fetch_eth_from_coingecko(start_date, end_date)
+        eth_series = fetch_eth_from_alpha_vantage()
         if eth_series is not None:
+            eth_series = eth_series[eth_series.index >= start_date]
             data["ETH-USD"] = eth_series
     else:
         for attempt in range(3):
@@ -75,19 +82,7 @@ for symbol in selected_assets:
                 break
             except:
                 time.sleep(5)
-        else:
-            st.error(f"❌ Failed to fetch data for {symbol}.")
 
-# DEBUG OUTPUTS
-if "ETH-USD" in data:
-    st.subheader("🔍 ETH Data Preview (from CoinGecko)")
-    st.write("📆 ETH index dtype:", data["ETH-USD"].index.dtype)
-    st.write("📈 ETH sample data (tail):")
-    st.dataframe(data["ETH-USD"].tail(10))
-else:
-    st.warning("⚠️ ETH-USD not in data — CoinGecko fetch may have failed.")
-
-# 合併並印出整體結構
 if not data:
     st.error("❌ No data could be loaded.")
     st.stop()
@@ -95,11 +90,6 @@ if not data:
 price_df = pd.DataFrame(data).sort_index().ffill().bfill()
 returns = price_df.pct_change()
 
-st.subheader("🧪 Price DF Preview")
-st.write("📆 Price DF Index dtype:", price_df.index.dtype)
-st.dataframe(price_df.tail())
-
-st.subheader("🧪 Correlation Heatmap")
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
@@ -112,7 +102,20 @@ def pairwise_corr(df):
                 corr_matrix.loc[a, b] = np.nan
     return corr_matrix
 
-corr = pairwise_corr(returns)
-fig, ax = plt.subplots(figsize=(8, 6))
-sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+st.subheader("Normalized Price Trend")
+fig, ax = plt.subplots(figsize=(12, 5))
+for symbol in price_df.columns:
+    norm = price_df[symbol] / price_df[symbol].iloc[0]
+    ax.plot(norm.index, norm, label=asset_options.get(symbol, symbol))
+ax.set_title(f"Normalized Price Trend (Past {time_range})")
+ax.set_xlabel("Date")
+ax.set_ylabel("Normalized Price")
+ax.legend(loc="upper left")
+ax.grid(True)
 st.pyplot(fig)
+
+st.subheader("Correlation Heatmap")
+corr = pairwise_corr(returns)
+fig2, ax2 = plt.subplots(figsize=(8, 6))
+sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
+st.pyplot(fig2)
