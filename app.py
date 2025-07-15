@@ -7,10 +7,10 @@ from datetime import datetime, timedelta
 import pytz
 import numpy as np
 import time
-from yfinance.exceptions import YFRateLimitError
+import requests
 
 st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard (Retry & Fixed Corr)")
+st.title("Asset Analysis Dashboard (ETH via CoinGecko)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -26,7 +26,7 @@ asset_options = {
 selected_assets = st.sidebar.multiselect(
     "Select Assets",
     options=list(asset_options.keys()),
-    default=["BTC-USD", "GLD", "COIN"],
+    default=["BTC-USD", "GLD", "COIN", "ETH-USD"],
     format_func=lambda x: asset_options[x]
 )
 
@@ -63,32 +63,53 @@ local_timezone = pytz.timezone("Asia/Taipei")
 fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-%d %H:%M:%S")
 
 data = {}
+
+# 特別處理 ETH
+def fetch_eth_from_coingecko(start_date, end_date):
+    url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
+    days = (end_date - start_date).days + 1
+    params = {"vs_currency": "usd", "days": days, "interval": "daily"}
+    r = requests.get(url, params=params)
+    if r.status_code != 200:
+        return None
+    prices = r.json()["prices"]
+    df = pd.DataFrame(prices, columns=["ts", "price"])
+    df["Date"] = pd.to_datetime(df["ts"], unit="ms").dt.date
+    df = df.set_index("Date")
+    df = df[~df.index.duplicated(keep="first")]
+    return df["price"]
+
+# 資料抓取（ETH 用 CoinGecko，其他用 yfinance）
 for symbol in selected_assets:
-    for attempt in range(3):
-        try:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
-            if not hist.empty:
-                data[symbol] = hist["Close"]
-            break
-        except YFRateLimitError:
-            st.warning(f"⚠️ Rate limit hit while fetching {symbol}. Retrying... (attempt {attempt+1})")
-            time.sleep(5)
+    if symbol == "ETH-USD":
+        eth_series = fetch_eth_from_coingecko(start_date, end_date)
+        if eth_series is not None:
+            data["ETH-USD"] = eth_series
     else:
-        st.error(f"❌ Failed to fetch data for {symbol} after multiple attempts.")
+        for attempt in range(3):
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+                if not hist.empty:
+                    data[symbol] = hist["Close"]
+                break
+            except:
+                time.sleep(5)
+        else:
+            st.error(f"❌ Failed to fetch data for {symbol}.")
 
 if not data:
-    st.error("❌ No data could be loaded due to repeated rate limiting.")
+    st.error("❌ No data could be loaded.")
     st.stop()
 
-price_df = pd.DataFrame(data).ffill().bfill()
+price_df = pd.DataFrame(data).sort_index().ffill().bfill()
 if price_df.empty:
     st.warning("⚠️ No aligned data.")
     st.stop()
 
 returns = price_df.pct_change()
 
-# 修正的 pairwise correlation 計算函數
+# pairwise correlation
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
@@ -96,17 +117,17 @@ def pairwise_corr(df):
         for b in assets:
             pair = df[[a, b]].dropna()
             if len(pair) >= 2:
-                corr_value = pair.corr().iloc[0, 1]
-                corr_matrix.loc[a, b] = corr_value
+                corr_matrix.loc[a, b] = pair.corr().iloc[0, 1]
             else:
                 corr_matrix.loc[a, b] = np.nan
     return corr_matrix
 
+# Normalized Price Trend
 st.subheader("Normalized Price Trend")
 fig, ax = plt.subplots(figsize=(12, 5))
 for symbol in price_df.columns:
     norm = price_df[symbol] / price_df[symbol].iloc[0]
-    ax.plot(norm.index, norm, label=asset_options[symbol])
+    ax.plot(norm.index, norm, label=asset_options.get(symbol, symbol))
 ax.set_title(f"Normalized Price Trend (Past {time_range})", fontsize=14, color=text_color)
 ax.set_xlabel("Date", color=text_color)
 ax.set_ylabel("Normalized Price", color=text_color)
@@ -118,7 +139,8 @@ ax.text(1.0, 1.02, f"Last Updated: {fetch_time_local}",
         transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=text_color)
 st.pyplot(fig)
 
-st.subheader("Correlation Heatmap (pairwise valid data)")
+# Correlation Heatmap
+st.subheader("Correlation Heatmap (ETH via CoinGecko)")
 corr = pairwise_corr(returns)
 fig2, ax2 = plt.subplots(figsize=(8, 6))
 sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
