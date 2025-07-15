@@ -10,7 +10,7 @@ import time
 import requests
 
 st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard (ETH via CoinGecko)")
+st.title("Asset Analysis Dashboard (ETH via CoinGecko, Fixed)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -64,7 +64,7 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 
-# 特別處理 ETH
+# 修正版：ETH 透過 CoinGecko 並保留 timestamp 格式
 def fetch_eth_from_coingecko(start_date, end_date):
     url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
     days = (end_date - start_date).days + 1
@@ -74,12 +74,12 @@ def fetch_eth_from_coingecko(start_date, end_date):
         return None
     prices = r.json()["prices"]
     df = pd.DataFrame(prices, columns=["ts", "price"])
-    df["Date"] = pd.to_datetime(df["ts"], unit="ms").dt.date
+    df["Date"] = pd.to_datetime(df["ts"], unit="ms")  # FIX: 保留 timestamp 精度
     df = df.set_index("Date")
     df = df[~df.index.duplicated(keep="first")]
     return df["price"]
 
-# 資料抓取（ETH 用 CoinGecko，其他用 yfinance）
+# 資料抓取
 for symbol in selected_assets:
     if symbol == "ETH-USD":
         eth_series = fetch_eth_from_coingecko(start_date, end_date)
@@ -109,7 +109,7 @@ if price_df.empty:
 
 returns = price_df.pct_change()
 
-# pairwise correlation
+# pairwise correlation 計算
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
