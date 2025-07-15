@@ -10,7 +10,7 @@ import time
 import requests
 
 st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard (ETH via CoinGecko, Fixed)")
+st.title("Asset Analysis Dashboard (ETH via CoinGecko v3)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -64,7 +64,7 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 
-# 修正版：ETH 透過 CoinGecko 並保留 timestamp 格式
+# 修正版：ETH from CoinGecko with .dt.normalize()
 def fetch_eth_from_coingecko(start_date, end_date):
     url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
     days = (end_date - start_date).days + 1
@@ -74,12 +74,12 @@ def fetch_eth_from_coingecko(start_date, end_date):
         return None
     prices = r.json()["prices"]
     df = pd.DataFrame(prices, columns=["ts", "price"])
-    df["Date"] = pd.to_datetime(df["ts"], unit="ms")  # FIX: 保留 timestamp 精度
+    df["Date"] = pd.to_datetime(df["ts"], unit="ms").dt.normalize()
     df = df.set_index("Date")
     df = df[~df.index.duplicated(keep="first")]
     return df["price"]
 
-# 資料抓取
+# 抓資料
 for symbol in selected_assets:
     if symbol == "ETH-USD":
         eth_series = fetch_eth_from_coingecko(start_date, end_date)
@@ -91,6 +91,7 @@ for symbol in selected_assets:
                 ticker = yf.Ticker(symbol)
                 hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
                 if not hist.empty:
+                    hist.index = hist.index.normalize()
                     data[symbol] = hist["Close"]
                 break
             except:
@@ -109,7 +110,6 @@ if price_df.empty:
 
 returns = price_df.pct_change()
 
-# pairwise correlation 計算
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
@@ -122,7 +122,6 @@ def pairwise_corr(df):
                 corr_matrix.loc[a, b] = np.nan
     return corr_matrix
 
-# Normalized Price Trend
 st.subheader("Normalized Price Trend")
 fig, ax = plt.subplots(figsize=(12, 5))
 for symbol in price_df.columns:
@@ -139,7 +138,6 @@ ax.text(1.0, 1.02, f"Last Updated: {fetch_time_local}",
         transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=text_color)
 st.pyplot(fig)
 
-# Correlation Heatmap
 st.subheader("Correlation Heatmap (ETH via CoinGecko)")
 corr = pairwise_corr(returns)
 fig2, ax2 = plt.subplots(figsize=(8, 6))
