@@ -9,18 +9,14 @@ import numpy as np
 import time
 import requests
 
-st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard (ETH via CoinGecko v3)")
+st.set_page_config(page_title="CryptoA ETH Debug", layout="wide")
+st.title("CryptoA Debug Mode: ETH via CoinGecko")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
     "ETH-USD": "Ethereum",
-    "SOL-USD": "Solana",
-    "TSLA": "Tesla",
-    "SPY": "S&P500 ETF",
     "GLD": "Gold ETF",
     "COIN": "Coinbase",
-    "MSTR": "MicroStrategy"
 }
 
 selected_assets = st.sidebar.multiselect(
@@ -34,28 +30,12 @@ if not selected_assets:
     st.warning("⚠️ Please select at least one asset.")
     st.stop()
 
-if len(selected_assets) > 5:
-    st.warning("⚠️ To avoid rate limits, please select 5 or fewer assets.")
-    st.stop()
-
 time_range = st.sidebar.selectbox(
     "Select Time Range",
     options=["7 Days", "30 Days", "180 Days", "365 Days"],
     index=3
 )
 days = {"7 Days": 7, "30 Days": 30, "180 Days": 180, "365 Days": 365}[time_range]
-
-theme = st.sidebar.radio("Theme Mode", ["Light", "Dark"], index=0)
-if theme == "Dark":
-    plt.style.use("dark_background")
-    background_color = "#0e1117"
-    grid_color = "gray"
-    text_color = "white"
-else:
-    plt.style.use("default")
-    background_color = "white"
-    grid_color = "lightgray"
-    text_color = "black"
 
 end_date = datetime.today()
 start_date = end_date - timedelta(days=days)
@@ -64,7 +44,7 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 
-# 修正版：ETH from CoinGecko with .dt.normalize()
+# ETH from CoinGecko (with normalized index)
 def fetch_eth_from_coingecko(start_date, end_date):
     url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
     days = (end_date - start_date).days + 1
@@ -79,7 +59,6 @@ def fetch_eth_from_coingecko(start_date, end_date):
     df = df[~df.index.duplicated(keep="first")]
     return df["price"]
 
-# 抓資料
 for symbol in selected_assets:
     if symbol == "ETH-USD":
         eth_series = fetch_eth_from_coingecko(start_date, end_date)
@@ -99,17 +78,28 @@ for symbol in selected_assets:
         else:
             st.error(f"❌ Failed to fetch data for {symbol}.")
 
+# DEBUG OUTPUTS
+if "ETH-USD" in data:
+    st.subheader("🔍 ETH Data Preview (from CoinGecko)")
+    st.write("📆 ETH index dtype:", data["ETH-USD"].index.dtype)
+    st.write("📈 ETH sample data (tail):")
+    st.dataframe(data["ETH-USD"].tail(10))
+else:
+    st.warning("⚠️ ETH-USD not in data — CoinGecko fetch may have failed.")
+
+# 合併並印出整體結構
 if not data:
     st.error("❌ No data could be loaded.")
     st.stop()
 
 price_df = pd.DataFrame(data).sort_index().ffill().bfill()
-if price_df.empty:
-    st.warning("⚠️ No aligned data.")
-    st.stop()
-
 returns = price_df.pct_change()
 
+st.subheader("🧪 Price DF Preview")
+st.write("📆 Price DF Index dtype:", price_df.index.dtype)
+st.dataframe(price_df.tail())
+
+st.subheader("🧪 Correlation Heatmap")
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
@@ -122,24 +112,7 @@ def pairwise_corr(df):
                 corr_matrix.loc[a, b] = np.nan
     return corr_matrix
 
-st.subheader("Normalized Price Trend")
-fig, ax = plt.subplots(figsize=(12, 5))
-for symbol in price_df.columns:
-    norm = price_df[symbol] / price_df[symbol].iloc[0]
-    ax.plot(norm.index, norm, label=asset_options.get(symbol, symbol))
-ax.set_title(f"Normalized Price Trend (Past {time_range})", fontsize=14, color=text_color)
-ax.set_xlabel("Date", color=text_color)
-ax.set_ylabel("Normalized Price", color=text_color)
-ax.legend(loc="upper left")
-ax.grid(True, color=grid_color)
-ax.set_facecolor(background_color)
-ax.tick_params(colors=text_color)
-ax.text(1.0, 1.02, f"Last Updated: {fetch_time_local}",
-        transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=text_color)
-st.pyplot(fig)
-
-st.subheader("Correlation Heatmap (ETH via CoinGecko)")
 corr = pairwise_corr(returns)
-fig2, ax2 = plt.subplots(figsize=(8, 6))
-sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
-st.pyplot(fig2)
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+st.pyplot(fig)
