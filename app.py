@@ -1,9 +1,9 @@
  (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
 diff --git a/app.py b/app.py
-index 80687f8cae4a66520e5c81600473782aad5b33b8..987baae9f7db959b29963334de617c322ad56fc5 100644
+index 093deddc4d574dcb4b7277d53f2c5b0b6cd6f701..987baae9f7db959b29963334de617c322ad56fc5 100644
 --- a/app.py
 +++ b/app.py
-@@ -31,70 +31,83 @@ if not selected_assets:
+@@ -31,60 +31,85 @@ if not selected_assets:
      st.stop()
  
  time_range = st.sidebar.selectbox(
@@ -48,23 +48,25 @@ index 80687f8cae4a66520e5c81600473782aad5b33b8..987baae9f7db959b29963334de617c32
      if "Time Series (Digital Currency Daily)" not in raw:
 +        st.error("Time series data not found in response")
          return None
-     df = pd.DataFrame.from_dict(
-         raw["Time Series (Digital Currency Daily)"], orient="index"
-     )
+-    df = pd.DataFrame.from_dict(raw["Time Series (Digital Currency Daily)"], orient="index")
++    df = pd.DataFrame.from_dict(
++        raw["Time Series (Digital Currency Daily)"], orient="index"
++    )
      df.index = pd.to_datetime(df.index)
      df.sort_index(inplace=True)
-     close_col = next(
-         (
-             c
-             for c in df.columns
-             if "close" in c.lower() and "usd" in c.lower()
-         ),
-         None,
-     )
-     if close_col is None:
+-    return df["4a. close (USD)"].astype(float)
++    close_col = next(
++        (
++            c
++            for c in df.columns
++            if "close" in c.lower() and "usd" in c.lower()
++        ),
++        None,
++    )
++    if close_col is None:
 +        st.error("No USD close price column found in Alpha Vantage data")
-         return None
-     return df[close_col].astype(float)
++        return None
++    return df[close_col].astype(float)
  
  # 抓資料
  for symbol in selected_assets:
@@ -88,6 +90,43 @@ index 80687f8cae4a66520e5c81600473782aad5b33b8..987baae9f7db959b29963334de617c32
  if not data:
      st.error("❌ No data could be loaded.")
      st.stop()
+ 
+ price_df = pd.DataFrame(data).sort_index().ffill().bfill()
+diff --git a/app.py b/app.py
+index 093deddc4d574dcb4b7277d53f2c5b0b6cd6f701..987baae9f7db959b29963334de617c322ad56fc5 100644
+--- a/app.py
++++ b/app.py
+@@ -96,26 +121,26 @@ def pairwise_corr(df):
+     for a in assets:
+         for b in assets:
+             pair = df[[a, b]].dropna()
+             if len(pair) >= 2:
+                 corr_matrix.loc[a, b] = pair.corr().iloc[0, 1]
+             else:
+                 corr_matrix.loc[a, b] = np.nan
+     return corr_matrix
+ 
+ st.subheader("Normalized Price Trend")
+ fig, ax = plt.subplots(figsize=(12, 5))
+ for symbol in price_df.columns:
+     norm = price_df[symbol] / price_df[symbol].iloc[0]
+     ax.plot(norm.index, norm, label=asset_options.get(symbol, symbol))
+ ax.set_title(f"Normalized Price Trend (Past {time_range})")
+ ax.set_xlabel("Date")
+ ax.set_ylabel("Normalized Price")
+ ax.legend(loc="upper left")
+ ax.grid(True)
+ st.pyplot(fig)
+ 
+ st.subheader("Correlation Heatmap")
+ corr = pairwise_corr(returns)
+ fig2, ax2 = plt.subplots(figsize=(8, 6))
+ sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
+-st.pyplot(fig2)
++st.pyplot(fig2)
+ 
+EOF
+)
  
 EOF
 )
