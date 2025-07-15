@@ -10,7 +10,7 @@ import time
 from yfinance.exceptions import YFRateLimitError
 
 st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard (With Retry)")
+st.title("Asset Analysis Dashboard (Retry & Fixed Corr)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -64,7 +64,7 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 for symbol in selected_assets:
-    for attempt in range(3):  # 最多重試 3 次
+    for attempt in range(3):
         try:
             ticker = yf.Ticker(symbol)
             hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
@@ -88,14 +88,16 @@ if price_df.empty:
 
 returns = price_df.pct_change()
 
+# 修正的 pairwise correlation 計算函數
 def pairwise_corr(df):
     assets = df.columns
     corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
     for a in assets:
         for b in assets:
             pair = df[[a, b]].dropna()
-            if len(pair) > 1:
-                corr_matrix.loc[a, b] = pair[a].corr(pair[b])
+            if len(pair) >= 2:
+                corr_value = pair.corr().iloc[0, 1]
+                corr_matrix.loc[a, b] = corr_value
             else:
                 corr_matrix.loc[a, b] = np.nan
     return corr_matrix
