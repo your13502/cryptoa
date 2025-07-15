@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
 import pytz
+import numpy as np
 
 st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
 st.title("Asset Analysis Dashboard")
@@ -71,21 +72,22 @@ if price_df.empty:
     st.warning("⚠️ No aligned data.")
     st.stop()
 
-returns = price_df.pct_change().dropna()
+returns = price_df.pct_change()
 
-# 資料診斷區塊
-st.sidebar.markdown("---")
-st.sidebar.markdown("🧪 **Data Diagnostics**")
-for a in selected_assets:
-    st.sidebar.write(f"{a} valid days:", returns[a].count())
+# Pairwise correlation with dropna per pair
+def pairwise_corr(df):
+    assets = df.columns
+    corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
+    for a in assets:
+        for b in assets:
+            pair = df[[a, b]].dropna()
+            if len(pair) > 1:
+                corr_matrix.loc[a, b] = pair[a].corr(pair[b])
+            else:
+                corr_matrix.loc[a, b] = np.nan
+    return corr_matrix
 
-if "ETH-USD" in selected_assets and "COIN" in selected_assets:
-    overlap = returns[["ETH-USD", "COIN"]].dropna().shape[0]
-    st.sidebar.write("ETH-USD & COIN overlapping days:", overlap)
-    if overlap < 2:
-        st.warning("⚠️ ETH and COIN do not have enough overlapping days to calculate correlation.")
-
-# Normalized Price Trend
+# 圖表：Normalized Price Trend
 st.subheader("Normalized Price Trend")
 fig, ax = plt.subplots(figsize=(12, 5))
 for symbol in price_df.columns:
@@ -102,9 +104,9 @@ ax.text(1.0, 1.02, f"Last Updated: {fetch_time_local}",
         transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=text_color)
 st.pyplot(fig)
 
-# Correlation Heatmap
-st.subheader("Correlation Heatmap")
-corr = returns.corr()
+# Heatmap：修正後的 pairwise correlation
+st.subheader("Correlation Heatmap (pairwise valid data)")
+corr = pairwise_corr(returns)
 fig2, ax2 = plt.subplots(figsize=(8, 6))
 sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
 st.pyplot(fig2)
