@@ -9,8 +9,8 @@ import numpy as np
 import time
 import requests
 
-st.set_page_config(page_title="CryptoA with Correlation Diagnostics", layout="wide")
-st.title("CryptoA Dashboard (Correlation Diagnostics Enabled)")
+st.set_page_config(page_title="CryptoA - Correlation Diagnostic v2", layout="wide")
+st.title("CryptoA Dashboard (ETH via Alpha Vantage + Error Handling)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -44,7 +44,7 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 
-# ETH from Alpha Vantage
+# 加入欄位檢查與錯誤提示的 ETH 抓取函式
 def fetch_eth_from_alpha_vantage():
     url = "https://www.alphavantage.co/query"
     params = {
@@ -55,13 +55,20 @@ def fetch_eth_from_alpha_vantage():
     }
     r = requests.get(url, params=params)
     if r.status_code != 200:
+        st.warning(f"❌ API status code: {r.status_code}")
         return None
     raw = r.json()
     if "Time Series (Digital Currency Daily)" not in raw:
+        st.warning("⚠️ Time Series not found in Alpha Vantage response")
+        st.json(raw)
         return None
     df = pd.DataFrame.from_dict(raw["Time Series (Digital Currency Daily)"], orient="index")
     df.index = pd.to_datetime(df.index)
     df.sort_index(inplace=True)
+    if "4a. close (USD)" not in df.columns:
+        st.warning("⚠️ Column '4a. close (USD)' not in Alpha Vantage response")
+        st.write("Available columns:", df.columns.tolist())
+        return None
     return df["4a. close (USD)"].astype(float)
 
 # 資料抓取
@@ -116,18 +123,15 @@ ax.legend(loc="upper left")
 ax.grid(True)
 st.pyplot(fig)
 
-# 顯示相關係數與重疊天數診斷
 st.subheader("Correlation Heatmap + Diagnostics")
 corr, overlap = pairwise_corr(returns)
 fig2, ax2 = plt.subplots(figsize=(8, 6))
 sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
 st.pyplot(fig2)
 
-# 顯示重疊天數
 st.markdown("### 📊 Overlapping Valid Days (per asset pair)")
 st.dataframe(overlap.astype(int))
 
-# 顯示低相關警示
 st.markdown("### 🔍 Low Correlation Insight")
 for a in corr.columns:
     for b in corr.columns:
