@@ -5,25 +5,24 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
 import pytz
+import numpy as np
+import time
+import requests
 
-st.set_page_config(page_title="Asset Analysis Dashboard", layout="wide")
-st.title("Asset Analysis Dashboard")
+st.set_page_config(page_title="CryptoA with Correlation Diagnostics", layout="wide")
+st.title("CryptoA Dashboard (Correlation Diagnostics Enabled)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
     "ETH-USD": "Ethereum",
-    "SOL-USD": "Solana",
-    "TSLA": "Tesla",
-    "SPY": "S&P500 ETF",
     "GLD": "Gold ETF",
-    "COIN": "Coinbase",
-    "MSTR": "MicroStrategy"
+    "COIN": "Coinbase"
 }
 
 selected_assets = st.sidebar.multiselect(
     "Select Assets",
     options=list(asset_options.keys()),
-    default=["BTC-USD", "GLD", "COIN"],
+    default=["BTC-USD", "GLD", "COIN", "ETH-USD"],
     format_func=lambda x: asset_options[x]
 )
 
@@ -38,73 +37,101 @@ time_range = st.sidebar.selectbox(
 )
 days = {"7 Days": 7, "30 Days": 30, "180 Days": 180, "365 Days": 365}[time_range]
 
-theme = st.sidebar.radio("Theme Mode", ["Light", "Dark"], index=0)
-if theme == "Dark":
-    plt.style.use("dark_background")
-    background_color = "#0e1117"
-    grid_color = "gray"
-    text_color = "white"
-else:
-    plt.style.use("default")
-    background_color = "white"
-    grid_color = "lightgray"
-    text_color = "black"
-
 end_date = datetime.today()
 start_date = end_date - timedelta(days=days)
 local_timezone = pytz.timezone("Asia/Taipei")
 fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-%d %H:%M:%S")
 
 data = {}
+
+# ETH from Alpha Vantage
+def fetch_eth_from_alpha_vantage():
+    url = "https://www.alphavantage.co/query"
+    params = {
+        "function": "DIGITAL_CURRENCY_DAILY",
+        "symbol": "ETH",
+        "market": "USD",
+        "apikey": "XR75NDTSCL5M3GST"
+    }
+    r = requests.get(url, params=params)
+    if r.status_code != 200:
+        return None
+    raw = r.json()
+    if "Time Series (Digital Currency Daily)" not in raw:
+        return None
+    df = pd.DataFrame.from_dict(raw["Time Series (Digital Currency Daily)"], orient="index")
+    df.index = pd.to_datetime(df.index)
+    df.sort_index(inplace=True)
+    return df["4a. close (USD)"].astype(float)
+
+# 資料抓取
 for symbol in selected_assets:
-    ticker = yf.Ticker(symbol)
-    hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
-    if not hist.empty:
-        data[symbol] = hist["Close"]
+    if symbol == "ETH-USD":
+        eth_series = fetch_eth_from_alpha_vantage()
+        if eth_series is not None:
+            eth_series = eth_series[eth_series.index >= start_date]
+            data["ETH-USD"] = eth_series
+    else:
+        for attempt in range(3):
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+                if not hist.empty:
+                    hist.index = hist.index.normalize()
+                    data[symbol] = hist["Close"]
+                break
+            except:
+                time.sleep(5)
 
 if not data:
-    st.warning("⚠️ No data available.")
+    st.error("❌ No data could be loaded.")
     st.stop()
 
-price_df = pd.DataFrame(data).ffill().bfill()
-if price_df.empty:
-    st.warning("⚠️ No aligned data.")
-    st.stop()
+price_df = pd.DataFrame(data).sort_index().ffill().bfill()
+returns = price_df.pct_change()
 
-returns = price_df.pct_change().dropna()
+def pairwise_corr(df):
+    assets = df.columns
+    corr_matrix = pd.DataFrame(index=assets, columns=assets, dtype=float)
+    overlap_matrix = pd.DataFrame(index=assets, columns=assets, dtype=int)
+    for a in assets:
+        for b in assets:
+            pair = df[[a, b]].dropna()
+            overlap_matrix.loc[a, b] = len(pair)
+            if len(pair) >= 2:
+                corr_matrix.loc[a, b] = pair.corr().iloc[0, 1]
+            else:
+                corr_matrix.loc[a, b] = np.nan
+    return corr_matrix, overlap_matrix
 
-# 資料診斷區塊
-st.sidebar.markdown("---")
-st.sidebar.markdown("🧪 **Data Diagnostics**")
-for a in selected_assets:
-    st.sidebar.write(f"{a} valid days:", returns[a].count())
-
-if "ETH-USD" in selected_assets and "COIN" in selected_assets:
-    overlap = returns[["ETH-USD", "COIN"]].dropna().shape[0]
-    st.sidebar.write("ETH-USD & COIN overlapping days:", overlap)
-    if overlap < 2:
-        st.warning("⚠️ ETH and COIN do not have enough overlapping days to calculate correlation.")
-
-# Normalized Price Trend
 st.subheader("Normalized Price Trend")
 fig, ax = plt.subplots(figsize=(12, 5))
 for symbol in price_df.columns:
     norm = price_df[symbol] / price_df[symbol].iloc[0]
-    ax.plot(norm.index, norm, label=asset_options[symbol])
-ax.set_title(f"Normalized Price Trend (Past {time_range})", fontsize=14, color=text_color)
-ax.set_xlabel("Date", color=text_color)
-ax.set_ylabel("Normalized Price", color=text_color)
+    ax.plot(norm.index, norm, label=asset_options.get(symbol, symbol))
+ax.set_title(f"Normalized Price Trend (Past {time_range})")
+ax.set_xlabel("Date")
+ax.set_ylabel("Normalized Price")
 ax.legend(loc="upper left")
-ax.grid(True, color=grid_color)
-ax.set_facecolor(background_color)
-ax.tick_params(colors=text_color)
-ax.text(1.0, 1.02, f"Last Updated: {fetch_time_local}",
-        transform=ax.transAxes, ha="right", va="bottom", fontsize=6, color=text_color)
+ax.grid(True)
 st.pyplot(fig)
 
-# Correlation Heatmap
-st.subheader("Correlation Heatmap")
-corr = returns.corr()
+# 顯示相關係數與重疊天數診斷
+st.subheader("Correlation Heatmap + Diagnostics")
+corr, overlap = pairwise_corr(returns)
 fig2, ax2 = plt.subplots(figsize=(8, 6))
 sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax2)
 st.pyplot(fig2)
+
+# 顯示重疊天數
+st.markdown("### 📊 Overlapping Valid Days (per asset pair)")
+st.dataframe(overlap.astype(int))
+
+# 顯示低相關警示
+st.markdown("### 🔍 Low Correlation Insight")
+for a in corr.columns:
+    for b in corr.columns:
+        if a != b and pd.notnull(corr.loc[a, b]):
+            value = corr.loc[a, b]
+            if abs(value) < 0.3:
+                st.info(f"💡 **{a}** and **{b}** only have correlation = `{value:.2f}` with `{overlap.loc[a,b]}` overlapping days. Possible reason: market behavior or time mismatch.")
