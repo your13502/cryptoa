@@ -4,5 +4,3 @@ pandas
 matplotlib
 seaborn
 pytz
-numpy
-requests
