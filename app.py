@@ -9,8 +9,8 @@ import numpy as np
 import time
 import requests
 
-st.set_page_config(page_title="CryptoA - Correlation Diagnostic v2", layout="wide")
-st.title("CryptoA Dashboard (ETH via Alpha Vantage + Error Handling)")
+st.set_page_config(page_title="CryptoA - ETH AlphaV + CoinGecko Fallback", layout="wide")
+st.title("CryptoA Dashboard (ETH fallback: Alpha Vantage → CoinGecko)")
 
 asset_options = {
     "BTC-USD": "Bitcoin",
@@ -44,7 +44,6 @@ fetch_time_local = datetime.utcnow().astimezone(local_timezone).strftime("%Y-%m-
 
 data = {}
 
-# 加入欄位檢查與錯誤提示的 ETH 抓取函式
 def fetch_eth_from_alpha_vantage():
     url = "https://www.alphavantage.co/query"
     params = {
@@ -55,29 +54,44 @@ def fetch_eth_from_alpha_vantage():
     }
     r = requests.get(url, params=params)
     if r.status_code != 200:
-        st.warning(f"❌ API status code: {r.status_code}")
-        return None
+        return None, "Alpha Vantage API error"
     raw = r.json()
     if "Time Series (Digital Currency Daily)" not in raw:
-        st.warning("⚠️ Time Series not found in Alpha Vantage response")
-        st.json(raw)
-        return None
+        return None, raw.get("Information", "No time series found")
     df = pd.DataFrame.from_dict(raw["Time Series (Digital Currency Daily)"], orient="index")
     df.index = pd.to_datetime(df.index)
     df.sort_index(inplace=True)
     if "4a. close (USD)" not in df.columns:
-        st.warning("⚠️ Column '4a. close (USD)' not in Alpha Vantage response")
-        st.write("Available columns:", df.columns.tolist())
-        return None
-    return df["4a. close (USD)"].astype(float)
+        return None, "Missing column"
+    return df["4a. close (USD)"].astype(float), None
 
-# 資料抓取
+def fetch_eth_from_coingecko():
+    url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
+    params = {"vs_currency": "usd", "days": days, "interval": "daily"}
+    r = requests.get(url, params=params)
+    if r.status_code != 200:
+        return None
+    prices = r.json().get("prices", [])
+    df = pd.DataFrame(prices, columns=["ts", "price"])
+    df["Date"] = pd.to_datetime(df["ts"], unit="ms").dt.normalize()
+    df = df.set_index("Date")
+    return df["price"]
+
 for symbol in selected_assets:
     if symbol == "ETH-USD":
-        eth_series = fetch_eth_from_alpha_vantage()
+        eth_series, err = fetch_eth_from_alpha_vantage()
         if eth_series is not None:
             eth_series = eth_series[eth_series.index >= start_date]
             data["ETH-USD"] = eth_series
+            st.success("✅ ETH data loaded from Alpha Vantage")
+        else:
+            st.warning(f"⚠️ Alpha Vantage failed: {err} → fallback to CoinGecko")
+            eth_series = fetch_eth_from_coingecko()
+            if eth_series is not None:
+                data["ETH-USD"] = eth_series
+                st.success("✅ ETH data loaded from CoinGecko")
+            else:
+                st.error("❌ Failed to load ETH from both Alpha Vantage and CoinGecko")
     else:
         for attempt in range(3):
             try:
